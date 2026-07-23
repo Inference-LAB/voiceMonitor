@@ -6,11 +6,12 @@ class SessionReport:
         self.analytics = SessionAnalytics()
         self.records = []
 
-    def add_record(self, timestamp, chunk_file, score):
+    def add_record(self, timestamp, chunk_file, score, features=None):
         self.records.append({
             "timestamp": timestamp,
             "chunk": chunk_file,
             "score": score,
+            "features": features or {},
         })
         self.analytics.add(score, timestamp)
 
