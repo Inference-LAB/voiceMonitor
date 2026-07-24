@@ -1,3 +1,5 @@
+import logging
+
 import sounddevice as sd
 import numpy as np
 import os
@@ -8,6 +10,8 @@ from auralis.scorer import score_audio
 from .config import Config
 from .utils import timestamp, ensure_dir
 from .session import SessionReport
+
+logger = logging.getLogger(__name__)
 
 try:
     import parselmouth
@@ -22,12 +26,21 @@ def extract_acoustic_features(wav_path):
     Extracts jitter, shimmer, harmonics to noise ratio, and smoothed
     cepstral peak prominence from a short audio segment using Praat, via
     parselmouth. These are established speech pathology markers of vocal
-    fatigue, used alongside the primary auralis_vfs score rather than in
-    place of it. Returns an empty dict if parselmouth is unavailable or if
-    extraction fails on a short or silent window, so a single bad window
-    does not interrupt the monitoring session.
+    fatigue, collected here as auxiliary features for future analysis.
+    They are stored alongside the primary auralis_vfs score but do not
+    currently influence the fatigue score, warning logic, or any
+    downstream analytics computed by this package.
+
+    Returns an empty dict if parselmouth is unavailable or if extraction
+    fails on a short or silent window. Failures are logged as warnings
+    rather than raised, so a single bad window does not interrupt the
+    monitoring session, while still leaving a trace for debugging.
     """
     if not _PARSELMOUTH_AVAILABLE:
+        logger.warning(
+            "parselmouth is not installed; skipping acoustic feature extraction for %s",
+            wav_path,
+        )
         return {}
 
     try:
@@ -56,7 +69,8 @@ def extract_acoustic_features(wav_path):
             "hnr": hnr,
             "cpps": cpps,
         }
-    except Exception:
+    except Exception as exc:
+        logger.warning("Acoustic feature extraction failed for %s: %s", wav_path, exc)
         return {}
 
 
@@ -67,6 +81,7 @@ class VoiceMonitor:
         self.chunk_dir = chunk_dir or f"{Config.CHUNK_DIR}_{timestamp()}"
         ensure_dir(self.chunk_dir)
         self.session = SessionReport()
+        self._samples_processed = 0
 
     def _save_chunk(self, audio_arr: np.ndarray, ts: str):
         """Write raw audio to temporary wav"""
@@ -75,7 +90,7 @@ class VoiceMonitor:
         sf.write(fname, audio_arr, Config.SAMPLE_RATE)
         return fname
 
-    def _process_chunk(self, wav_path: str, ts: str):
+    def _process_chunk(self, wav_path: str, ts: str, elapsed_seconds: float):
         # run auralis preprocessing (standardize)
         out_files = preprocess_audio(wav_path, self.chunk_dir)
         if not out_files:
@@ -87,7 +102,9 @@ class VoiceMonitor:
         if Config.EXTRACT_ACOUSTIC_FEATURES:
             features = extract_acoustic_features(processed)
 
-        self.session.add_record(ts, processed, score, features=features)
+        self.session.add_record(
+            ts, processed, score, elapsed_seconds, features=features
+        )
         return score
 
     def start(self, duration_sec=None):
@@ -106,12 +123,20 @@ class VoiceMonitor:
             while remaining > 0:
                 block, _ = stream.read(step_samples)
                 buffer = np.concatenate([buffer, block.flatten()])
+                self._samples_processed += step_samples
 
                 if len(buffer) >= win_samples:
                     ts = timestamp()
+                    # elapsed_seconds is derived from the actual audio
+                    # samples consumed so far, the same deterministic
+                    # clock the audio stream itself runs on, rather than a
+                    # separate wall clock that could drift due to
+                    # processing latency between windows
+                    elapsed_seconds = self._samples_processed / Config.SAMPLE_RATE
+
                     # write raw to wav
                     raw_file = self._save_chunk(buffer[:win_samples], ts)
-                    score = self._process_chunk(raw_file, ts)
+                    score = self._process_chunk(raw_file, ts, elapsed_seconds)
 
                     # slide buffer
                     buffer = buffer[int(step_samples):]
