@@ -108,7 +108,7 @@ class SessionAnalytics:
         self._ema = EMAFatigue()
         self._impulse = ImpulseResponseFatigue()
 
-    def add(self, score, ts, elapsed_seconds):
+    def add(self, score, ts, elapsed_seconds=None):
         """
         ts: the human readable session timestamp string (e.g. from
         utils.timestamp()), used for record labeling and display only.
@@ -116,7 +116,18 @@ class SessionAnalytics:
         time in seconds, used for all decay and load calculations. Keeping
         these two separate but both required makes explicit that display
         timestamps and temporal math must not be conflated.
+
+        If elapsed_seconds is not provided, it defaults to a count based
+        estimate (number of windows added so far multiplied by the
+        configured step size). This keeps the method backward compatible
+        with callers that only have a raw score and timestamp, while real
+        usage (VoiceMonitor.start) always supplies the true elapsed time
+        derived from audio samples processed, which is what the decay
+        model should use whenever it is available.
         """
+        if elapsed_seconds is None:
+            elapsed_seconds = len(self.scores) * Config.STEP_SEC
+
         self.scores.append(score)
         self.timestamps.append(ts)
 

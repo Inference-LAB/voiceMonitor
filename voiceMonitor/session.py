@@ -1,12 +1,20 @@
 import json
 from .analytics import SessionAnalytics
 
+
 class SessionReport:
     def __init__(self):
         self.analytics = SessionAnalytics()
         self.records = []
 
-    def add_record(self, timestamp, chunk_file, score, elapsed_seconds, features=None):
+    def add_record(
+        self,
+        timestamp,
+        chunk_file,
+        score,
+        elapsed_seconds=None,
+        features=None,
+    ):
         """
         features: acoustic markers (jitter, shimmer, HNR, CPPS) collected
         alongside the primary auralis_vfs score. These are currently
