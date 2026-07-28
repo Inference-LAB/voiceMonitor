@@ -60,3 +60,35 @@ def test_export_json_writes_expected_structure():
         assert "records" in data
         assert data["records"][0]["timestamp"] == "ts1"
         assert data["summary"]["readings"] == 1
+
+
+def test_add_record_exposes_recovery_eta_per_window():
+    report = SessionReport()
+    report.add_record("ts1", "chunks/ts1.wav", 100, elapsed_seconds=0)
+    record = report.records[0]
+
+    assert "recovery_eta_sec" in record
+    assert "acute_load" in record
+    assert "chronic_load" in record
+    assert "readiness_experimental" in record
+    assert "smoothed_score" in record
+    assert record["recovery_eta_sec"] > 0
+
+
+def test_recovery_eta_decreases_as_session_recovers():
+    report = SessionReport()
+    report.add_record("ts1", "chunks/ts1.wav", 100, elapsed_seconds=0)
+    first_eta = report.records[0]["recovery_eta_sec"]
+
+    # a long pause with low scores should let the acute load decay,
+    # reducing the estimated recovery time on the next reading
+    report.add_record("ts2", "chunks/ts2.wav", 0, elapsed_seconds=120)
+    second_eta = report.records[1]["recovery_eta_sec"]
+
+    assert second_eta < first_eta
+
+
+def test_recovery_eta_is_zero_for_low_scores():
+    report = SessionReport()
+    report.add_record("ts1", "chunks/ts1.wav", 5, elapsed_seconds=0)
+    assert report.records[0]["recovery_eta_sec"] == 0
