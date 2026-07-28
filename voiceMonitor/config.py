@@ -5,7 +5,7 @@ class Config:
     STEP_SEC = 4
 
     # fatigue warnings
-    DEFAULT_THRESHOLD = 70  # out of 0 to 100 scale
+    DEFAULT_THRESHOLD = 70  # out of 0-100 scale
 
     # session metadata
     SAVE_CHUNKS = True
@@ -21,3 +21,7 @@ class Config:
 
     # acoustic feature extraction
     EXTRACT_ACOUSTIC_FEATURES = True
+
+    # personal baseline calibration
+    BASELINE_CALIBRATION_SEC = 45   # seconds, per design doc's 30-60s window
+    DEFAULT_POPULATION_BASELINE = 30  # fallback used before calibration completes
