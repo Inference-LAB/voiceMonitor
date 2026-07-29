@@ -92,3 +92,23 @@ def test_recovery_eta_is_zero_for_low_scores():
     report = SessionReport()
     report.add_record("ts1", "chunks/ts1.wav", 5, elapsed_seconds=0)
     assert report.records[0]["recovery_eta_sec"] == 0
+
+def test_add_record_stores_baseline_info_when_given():
+    report = SessionReport()
+    baseline_info = {"baseline": 30, "adjusted_score": 20, "is_provisional": True}
+    report.add_record(
+        "ts1", "chunks/ts1.wav", 50, elapsed_seconds=0, baseline_info=baseline_info
+    )
+    record = report.records[0]
+    assert record["baseline"] == 30
+    assert record["baseline_adjusted_score"] == 20
+    assert record["baseline_is_provisional"] is True
+
+
+def test_add_record_baseline_fields_default_to_none_when_omitted():
+    report = SessionReport()
+    report.add_record("ts1", "chunks/ts1.wav", 50, elapsed_seconds=0)
+    record = report.records[0]
+    assert record["baseline"] is None
+    assert record["baseline_adjusted_score"] is None
+    assert record["baseline_is_provisional"] is None
