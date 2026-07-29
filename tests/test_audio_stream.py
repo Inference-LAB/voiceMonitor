@@ -87,3 +87,24 @@ def test_start_runs_for_fixed_duration_and_returns_session(
     # two one-second steps should have produced two processed windows
     assert len(session.records) == 2
     assert mock_score.call_count == 2
+
+@patch("voiceMonitor.audio_stream.extract_acoustic_features")
+@patch("voiceMonitor.audio_stream.score_audio")
+@patch("voiceMonitor.audio_stream.preprocess_audio")
+def test_process_chunk_wires_baseline_calibration(
+    mock_preprocess, mock_score, mock_features, tmp_path
+):
+    mock_preprocess.return_value = ["processed_chunk.wav"]
+    mock_score.return_value = 50.0
+    mock_features.return_value = {}
+
+    vm = VoiceMonitor(chunk_dir=str(tmp_path / "chunks_test7"))
+    audio = np.zeros((Config.SAMPLE_RATE,), dtype="float32")
+    raw_file = vm._save_chunk(audio, "20260101_000000")
+
+    vm._process_chunk(raw_file, "20260101_000000", elapsed_seconds=0)
+
+    record = vm.session.records[0]
+    assert record["baseline"] is not None
+    assert record["baseline_adjusted_score"] is not None
+    assert record["baseline_is_provisional"] is True
