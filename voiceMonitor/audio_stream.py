@@ -10,6 +10,7 @@ from auralis.scorer import score_audio
 from .config import Config
 from .utils import timestamp, ensure_dir
 from .session import SessionReport
+from .baseline import BaselineCalibrator
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,7 @@ class VoiceMonitor:
         self.chunk_dir = chunk_dir or f"{Config.CHUNK_DIR}_{timestamp()}"
         ensure_dir(self.chunk_dir)
         self.session = SessionReport()
+        self.baseline = BaselineCalibrator()
         self._samples_processed = 0
 
     def _save_chunk(self, audio_arr: np.ndarray, ts: str):
@@ -102,8 +104,11 @@ class VoiceMonitor:
         if Config.EXTRACT_ACOUSTIC_FEATURES:
             features = extract_acoustic_features(processed)
 
+        baseline_info = self.baseline.update(score, elapsed_seconds)
+
         self.session.add_record(
-            ts, processed, score, elapsed_seconds, features=features
+            ts, processed, score, elapsed_seconds,
+            features=features, baseline_info=baseline_info,
         )
         return score
 
@@ -127,21 +132,13 @@ class VoiceMonitor:
 
                 if len(buffer) >= win_samples:
                     ts = timestamp()
-                    # elapsed_seconds is derived from the actual audio
-                    # samples consumed so far, the same deterministic
-                    # clock the audio stream itself runs on, rather than a
-                    # separate wall clock that could drift due to
-                    # processing latency between windows
                     elapsed_seconds = self._samples_processed / Config.SAMPLE_RATE
 
-                    # write raw to wav
                     raw_file = self._save_chunk(buffer[:win_samples], ts)
                     score = self._process_chunk(raw_file, ts, elapsed_seconds)
 
-                    # slide buffer
                     buffer = buffer[int(step_samples):]
 
-                    # warnings & prints
                     print(f"[{ts}] Score: {score:.2f}")
                     if score >= self.threshold:
                         print("⚠ fatigue threshold crossed")
